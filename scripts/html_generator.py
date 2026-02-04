@@ -7,6 +7,7 @@ No external dependencies - all CSS and JS embedded inline.
 
 import html
 import re
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 
@@ -619,6 +620,47 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             word-break: break-all;
         }}
 
+        /* Session Metadata Grid on Title Slide */
+        .session-metadata {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+            padding: 25px 30px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 700px;
+        }}
+
+        .meta-item {{
+            text-align: center;
+            padding: 10px;
+        }}
+
+        .meta-label {{
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 8px;
+        }}
+
+        .meta-value {{
+            display: block;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent-light);
+            word-break: break-word;
+        }}
+
+        .meta-value.small {{
+            font-size: 0.9rem;
+            font-weight: 500;
+        }}
+
         /* Responsive */
         @media (max-width: 768px) {{
             .slide-container {{
@@ -1010,9 +1052,123 @@ def format_response_content(content: str, truncate_prose: bool = True) -> str:
     return '\n'.join(formatted_parts)
 
 
+def _format_datetime(dt_string: str) -> tuple:
+    """
+    Parse and format a datetime string into readable date and time components.
+
+    Args:
+        dt_string: ISO format datetime string or similar
+
+    Returns:
+        Tuple of (formatted_date, formatted_time) or (None, None) if parsing fails
+    """
+    if not dt_string:
+        return None, None
+
+    # Handle timezone offset by stripping it (e.g., +00:00)
+    import re
+    clean_dt = re.sub(r'[+-]\d{2}:\d{2}$', '', dt_string)
+
+    # Try various datetime formats
+    formats = [
+        '%Y-%m-%dT%H:%M:%S.%fZ',
+        '%Y-%m-%dT%H:%M:%SZ',
+        '%Y-%m-%dT%H:%M:%S.%f',
+        '%Y-%m-%dT%H:%M:%S',
+        '%Y-%m-%d %H:%M:%S.%f',
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d',
+    ]
+
+    dt = None
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(clean_dt, fmt)
+            break
+        except ValueError:
+            continue
+
+    if dt is None:
+        # Return the raw string if we can't parse it
+        return dt_string, None
+
+    # Format nicely: "February 4, 2026" and "2:30 PM"
+    date_str = dt.strftime('%B %d, %Y').replace(' 0', ' ')  # Remove leading zero from day
+    time_str = dt.strftime('%I:%M %p').lstrip('0')  # Remove leading zero from hour
+
+    return date_str, time_str
+
+
+def _calculate_duration(turns: list) -> str:
+    """
+    Calculate session duration from turn timestamps.
+
+    Args:
+        turns: List of turn dictionaries with timestamp fields
+
+    Returns:
+        Formatted duration string or None if cannot calculate
+    """
+    if not turns or len(turns) < 2:
+        return None
+
+    timestamps = []
+    for turn in turns:
+        ts = turn.get('timestamp')
+        if ts:
+            timestamps.append(ts)
+
+    if len(timestamps) < 2:
+        return None
+
+    # Try to parse first and last timestamps
+    formats = [
+        '%Y-%m-%dT%H:%M:%S.%fZ',
+        '%Y-%m-%dT%H:%M:%SZ',
+        '%Y-%m-%dT%H:%M:%S.%f',
+        '%Y-%m-%dT%H:%M:%S',
+    ]
+
+    first_dt = None
+    last_dt = None
+
+    for fmt in formats:
+        try:
+            first_dt = datetime.strptime(timestamps[0], fmt)
+            last_dt = datetime.strptime(timestamps[-1], fmt)
+            break
+        except ValueError:
+            continue
+
+    if first_dt is None or last_dt is None:
+        return None
+
+    # Calculate duration
+    delta = last_dt - first_dt
+    total_seconds = int(delta.total_seconds())
+
+    if total_seconds < 0:
+        return None
+
+    if total_seconds < 60:
+        return f'{total_seconds}s'
+    elif total_seconds < 3600:
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        if seconds:
+            return f'{minutes}m {seconds}s'
+        return f'{minutes}m'
+    else:
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        if minutes:
+            return f'{hours}h {minutes}m'
+        return f'{hours}h'
+
+
 def generate_title_slide(session: Dict[str, Any], title: str) -> str:
     """
-    Generate the title slide HTML.
+    Generate the title slide HTML with elegant session metadata.
 
     Supports both new format (session_id, project_path, created_at at root)
     and old format (metadata dict with timestamp).
@@ -1071,38 +1227,108 @@ def generate_title_slide(session: Dict[str, Any], title: str) -> str:
     # Use total_turns if provided (new format), otherwise count
     total_turns = session.get('total_turns', user_turn_count)
 
-    # Build subtitle
-    if created_at:
-        subtitle = f'Session recorded: {created_at}'
+    # Parse datetime for display
+    formatted_date, formatted_time = _format_datetime(created_at)
+
+    # Get project name from path
+    project_name = ''
+    if project_path:
+        path_parts = project_path.replace('\\', '/').rstrip('/').split('/')
+        project_name = path_parts[-1] if path_parts else ''
+
+    # Calculate duration from timestamps
+    duration = _calculate_duration(turns)
+
+    # Build subtitle with formatted date
+    if formatted_date and formatted_time:
+        subtitle = f'{formatted_date} at {formatted_time}'
+    elif formatted_date:
+        subtitle = formatted_date
     else:
         subtitle = 'Claude Code Session'
 
-    # Build metadata section if we have details
+    # Build the session metadata grid
+    meta_items = []
+
+    # Session ID (abbreviated to 8 chars)
+    if session_id:
+        display_id = session_id[:8]
+        meta_items.append(f'''
+            <div class="meta-item">
+                <span class="meta-label">Session</span>
+                <span class="meta-value">{html_escape(display_id)}</span>
+            </div>
+        ''')
+
+    # Date
+    if formatted_date:
+        # Shorten the date for the grid (e.g., "Feb 4, 2026")
+        short_date = formatted_date
+        try:
+            # Try to parse and re-format to shorter version
+            for fmt in ['%B %d, %Y', '%B %d %Y']:
+                try:
+                    dt = datetime.strptime(formatted_date.replace('  ', ' '), fmt)
+                    # Use %-d on Linux/Mac, %#d on Windows to avoid leading zeros
+                    try:
+                        short_date = dt.strftime('%b %-d, %Y')
+                    except ValueError:
+                        # Fallback for Windows
+                        short_date = dt.strftime('%b %d, %Y').replace(' 0', ' ')
+                    break
+                except ValueError:
+                    continue
+        except Exception:
+            pass
+
+        meta_items.append(f'''
+            <div class="meta-item">
+                <span class="meta-label">Date</span>
+                <span class="meta-value">{html_escape(short_date)}</span>
+            </div>
+        ''')
+
+    # Project name
+    if project_name:
+        meta_items.append(f'''
+            <div class="meta-item">
+                <span class="meta-label">Project</span>
+                <span class="meta-value small">{html_escape(project_name)}</span>
+            </div>
+        ''')
+
+    # Total turns
+    meta_items.append(f'''
+        <div class="meta-item">
+            <span class="meta-label">Turns</span>
+            <span class="meta-value">{total_turns}</span>
+        </div>
+    ''')
+
+    # Duration (if calculable)
+    if duration:
+        meta_items.append(f'''
+            <div class="meta-item">
+                <span class="meta-label">Duration</span>
+                <span class="meta-value">{html_escape(duration)}</span>
+            </div>
+        ''')
+
+    # Tools count
+    if tool_count > 0:
+        meta_items.append(f'''
+            <div class="meta-item">
+                <span class="meta-label">Tools</span>
+                <span class="meta-value">{tool_count}</span>
+            </div>
+        ''')
+
+    # Build metadata HTML only if we have items
     metadata_html = ''
-    if session_id or project_path:
-        metadata_items = []
-        if session_id:
-            # Show abbreviated session ID
-            display_id = session_id[:12] + '...' if len(session_id) > 12 else session_id
-            metadata_items.append(f'''
-                <div class="metadata-item">
-                    <span class="metadata-label">Session:</span>
-                    <span class="metadata-value">{html_escape(display_id)}</span>
-                </div>
-            ''')
-        if project_path:
-            # Show just the project folder name for brevity
-            path_parts = project_path.replace('\\', '/').rstrip('/').split('/')
-            display_path = path_parts[-1] if path_parts else project_path
-            metadata_items.append(f'''
-                <div class="metadata-item">
-                    <span class="metadata-label">Project:</span>
-                    <span class="metadata-value">{html_escape(display_path)}</span>
-                </div>
-            ''')
+    if meta_items:
         metadata_html = f'''
-            <div class="metadata-section">
-                {''.join(metadata_items)}
+            <div class="session-metadata">
+                {''.join(meta_items)}
             </div>
         '''
 
@@ -1110,16 +1336,6 @@ def generate_title_slide(session: Dict[str, Any], title: str) -> str:
     <div class="slide slide-title active">
         <h1>{html_escape(title)}</h1>
         <p class="subtitle">{html_escape(subtitle)}</p>
-        <div class="stats">
-            <div class="stat">
-                <div class="stat-value">{total_turns}</div>
-                <div class="stat-label">Turns</div>
-            </div>
-            <div class="stat">
-                <div class="stat-value">{tool_count}</div>
-                <div class="stat-label">Tools Used</div>
-            </div>
-        </div>
         {metadata_html}
     </div>
     '''

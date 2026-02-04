@@ -13,6 +13,7 @@ Options:
     --title TEXT     Custom presentation title
     --open           Open in browser after generation
     --ai-titles      Use Ollama for title generation (requires ollama)
+    --clean          Remove previous output files before generating
 """
 
 import argparse
@@ -206,6 +207,12 @@ Examples:
         help="Enable verbose output",
     )
 
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Remove previous output files before generating",
+    )
+
     args = parser.parse_args()
 
     # Step 1: Find or load session file
@@ -269,6 +276,15 @@ Examples:
     else:
         output_dir = Path(__file__).parent.parent / "output"
         output_dir.mkdir(exist_ok=True)
+
+        # Clean previous output files if requested
+        if args.clean:
+            old_files = list(output_dir.glob("session-slides-*.html"))
+            if old_files:
+                for old_file in old_files:
+                    old_file.unlink()
+                print_progress(f"Cleaned {len(old_files)} previous output file(s)")
+
         timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
         output_path = output_dir / f"session-slides-{timestamp}.html"
 

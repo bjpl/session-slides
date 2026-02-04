@@ -226,6 +226,9 @@ ACTION_VERBS: dict[str, str] = {
     "recommend": "Recommending",
     "feedback": "Providing Feedback",
     "critique": "Critiquing",
+    "go through": "Going Through",
+    "walk through": "Walking Through",
+    "step through": "Stepping Through",
 
     # Integration verbs
     "integrate": "Integrating",
@@ -399,6 +402,16 @@ COMMON_PREFIXES = [
     r"^dear\s+claude[,.]?\s*",
     r"^claude[,.]?\s*",
 
+    # Continuation phrases (must come before simpler patterns)
+    r"^after\s+(?:you\s+)?(?:finish|do|complete)\s+(?:that|this)[,.]?\s*",
+    r"^once\s+(?:you\s+)?(?:finish|complete|do)\s+(?:that|this)[,.]?\s*",
+    r"^once\s+that\s+(?:is\s+)?(?:done|finished|complete)[,.]?\s*",
+    r"^when\s+(?:you(?:'re|'ve)?|that(?:'s)?)\s+(?:done|finished)[,.]?\s*",
+    r"^when\s+that\s+(?:is\s+)?(?:done|finished|complete)[,.]?\s*",
+    r"^after\s+that[,.]?\s*",
+    r"^once\s+that[,.]?\s*",
+    r"^when\s+done[,.]?\s*",
+
     # Request phrases
     r"^can\s+you\s+(please\s+)?",
     r"^could\s+you\s+(please\s+)?",
@@ -551,8 +564,11 @@ def _find_meaningful_sentence(text: str) -> str | None:
     Returns:
         A meaningful sentence or None
     """
-    # Split by common sentence boundaries
-    sentences = re.split(r'(?<=[.!?])\s+|\n+', text)
+    # Smart sentence splitting: only split on sentence-ending punctuation followed by
+    # whitespace and a capital letter (indicating a new sentence), or on newlines.
+    # This avoids splitting on periods within incomplete fragments like "that.And"
+    # which don't have proper spacing.
+    sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])|\n+', text)
 
     for sentence in sentences:
         sentence = sentence.strip()
