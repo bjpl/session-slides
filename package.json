@@ -12,13 +12,13 @@
     "html",
     "cli"
   ],
-  "homepage": "https://github.com/bjplambert/session-slides",
+  "homepage": "https://github.com/bjpl/session-slides",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bjplambert/session-slides.git"
+    "url": "https://github.com/bjpl/session-slides.git"
   },
   "bugs": {
-    "url": "https://github.com/bjplambert/session-slides/issues"
+    "url": "https://github.com/bjpl/session-slides/issues"
   },
   "license": "MIT",
   "author": "Brandon J.P. Lambert",
