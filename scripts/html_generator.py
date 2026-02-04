@@ -1066,7 +1066,6 @@ def _format_datetime(dt_string: str) -> tuple:
         return None, None
 
     # Handle timezone offset by stripping it (e.g., +00:00)
-    import re
     clean_dt = re.sub(r'[+-]\d{2}:\d{2}$', '', dt_string)
 
     # Try various datetime formats
@@ -1121,6 +1120,10 @@ def _calculate_duration(turns: list) -> str:
     if len(timestamps) < 2:
         return None
 
+    # Strip timezone offsets before parsing (e.g., +00:00)
+    first_ts = re.sub(r'[+-]\d{2}:\d{2}$', '', timestamps[0])
+    last_ts = re.sub(r'[+-]\d{2}:\d{2}$', '', timestamps[-1])
+
     # Try to parse first and last timestamps
     formats = [
         '%Y-%m-%dT%H:%M:%S.%fZ',
@@ -1134,8 +1137,8 @@ def _calculate_duration(turns: list) -> str:
 
     for fmt in formats:
         try:
-            first_dt = datetime.strptime(timestamps[0], fmt)
-            last_dt = datetime.strptime(timestamps[-1], fmt)
+            first_dt = datetime.strptime(first_ts, fmt)
+            last_dt = datetime.strptime(last_ts, fmt)
             break
         except ValueError:
             continue
