@@ -36,7 +36,6 @@ Output defaults to `./session-slides/{timestamp}.html` in your current directory
 | `--output PATH` | Output HTML file path (default: `./session-slides/{timestamp}.html`) |
 | `--title TEXT` | Custom presentation title |
 | `--open` | Open in browser after generation |
-| `--ai-titles` | Use Ollama for slide titles (requires local Ollama) |
 | `--clean` | Remove previous timestamped output files |
 | `--verbose` | Enable verbose output |
 

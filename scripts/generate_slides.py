@@ -12,7 +12,6 @@ Options:
     --output PATH    Output HTML file (default: ./session-slides/{timestamp}.html)
     --title TEXT     Custom presentation title
     --open           Open in browser after generation
-    --ai-titles      Use Ollama for title generation (requires ollama)
     --clean          Remove previous output files before generating
 """
 
@@ -25,7 +24,7 @@ from typing import Optional
 
 # Import from sibling modules
 from parser import Session, Turn, extract_turns, find_current_session, load_session
-from titles import generate_turn_title, generate_continued_title, generate_title_ollama
+from titles import generate_turn_title, generate_continued_title
 from truncation import (
     TruncationConfig,
     truncate_user_prompt,
@@ -51,22 +50,14 @@ def print_error(message: str) -> None:
     print(f"[✗] {message}", file=sys.stderr)
 
 
-def generate_titles_for_session(session: Session, use_ai: bool = False) -> dict[int, str]:
+def generate_titles_for_session(session: Session) -> dict[int, str]:
     """Generate titles for all turns in a session."""
     titles = {}
 
     for turn in session.turns:
         if turn.is_user_message():
             prompt = turn.get_text_content()
-            if use_ai:
-                # Try AI first, fall back to heuristic
-                ai_title = generate_title_ollama(prompt)
-                if ai_title:
-                    titles[turn.number if hasattr(turn, 'number') else len(titles) + 1] = ai_title
-                else:
-                    titles[turn.number if hasattr(turn, 'number') else len(titles) + 1] = generate_turn_title(prompt, len(titles) + 1)
-            else:
-                titles[turn.number if hasattr(turn, 'number') else len(titles) + 1] = generate_turn_title(prompt, len(titles) + 1)
+            titles[turn.number if hasattr(turn, 'number') else len(titles) + 1] = generate_turn_title(prompt, len(titles) + 1)
 
     return titles
 
@@ -159,7 +150,6 @@ def main() -> int:
 Examples:
   python generate_slides.py --from session.jsonl
   python generate_slides.py --from session.jsonl --output slides.html --title "My Session"
-  python generate_slides.py --from session.jsonl --ai-titles --open
   python generate_slides.py  # Auto-detect latest session file
         """,
     )
@@ -192,12 +182,6 @@ Examples:
         "--open",
         action="store_true",
         help="Open the generated HTML in default browser",
-    )
-
-    parser.add_argument(
-        "--ai-titles",
-        action="store_true",
-        help="Use Ollama AI to generate slide titles (requires local Ollama)",
     )
 
     parser.add_argument(
@@ -249,10 +233,7 @@ Examples:
     print_success(f"Parsed {len(session.turns)} messages ({user_turns} user turns)")
 
     # Step 3: Convert to dict format and generate titles
-    if args.ai_titles:
-        print_progress("Generating AI titles with Ollama...")
-    else:
-        print_progress("Generating heuristic titles...")
+    print_progress("Generating slide titles...")
 
     session_dict = session_to_dict(session)
     print_success(f"Generated {session_dict['total_turns']} slide titles")
