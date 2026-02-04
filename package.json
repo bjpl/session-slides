@@ -33,6 +33,10 @@
     "linux",
     "win32"
   ],
+  "scripts": {
+    "test": "python3 -m pytest scripts/tests/ -q",
+    "prepublishOnly": "python3 -m pytest scripts/tests/ -q"
+  },
   "dependencies": {
     "cross-spawn": "^7.0.3"
   }
