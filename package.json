@@ -23,7 +23,7 @@
   "license": "MIT",
   "author": "Brandon J.P. Lambert",
   "bin": {
-    "session-slides": "./bin/session-slides.js"
+    "session-slides": "bin/session-slides.js"
   },
   "engines": {
     "node": ">=14.0.0"
