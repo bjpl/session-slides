@@ -1,6 +1,6 @@
 {
   "name": "@bjpl/session-slides",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Convert Claude Code session transcripts into navigable HTML slide presentations",
   "keywords": [
     "claude",

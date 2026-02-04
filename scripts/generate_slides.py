@@ -9,7 +9,7 @@ Usage:
 
 Options:
     --from PATH      Session JSONL file (auto-detects if omitted)
-    --output PATH    Output HTML file (default: output/session-slides-{timestamp}.html)
+    --output PATH    Output HTML file (default: ./session-slides/{timestamp}.html)
     --title TEXT     Custom presentation title
     --open           Open in browser after generation
     --ai-titles      Use Ollama for title generation (requires ollama)
@@ -177,7 +177,7 @@ Examples:
         "-o",
         type=str,
         metavar="PATH",
-        help="Output HTML file path (default: output/session-slides-{timestamp}.html)",
+        help="Output HTML file path (default: ./session-slides/{timestamp}.html)",
     )
 
     parser.add_argument(
@@ -274,19 +274,21 @@ Examples:
     if args.output:
         output_path = Path(args.output)
     else:
-        output_dir = Path(__file__).parent.parent / "output"
+        # Default: write to ./session-slides/ in the current working directory
+        # Each run gets a timestamped filename to preserve history
+        output_dir = Path.cwd() / "session-slides"
         output_dir.mkdir(exist_ok=True)
 
         # Clean previous output files if requested
         if args.clean:
-            old_files = list(output_dir.glob("session-slides-*.html"))
+            old_files = list(output_dir.glob("*.html"))
             if old_files:
                 for old_file in old_files:
                     old_file.unlink()
                 print_progress(f"Cleaned {len(old_files)} previous output file(s)")
 
         timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-        output_path = output_dir / f"session-slides-{timestamp}.html"
+        output_path = output_dir / f"{timestamp}.html"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

@@ -16,26 +16,28 @@ Requires Python 3.8 or later.
 # Generate slides from the current project's most recent session
 session-slides
 
+# Open in browser immediately
+session-slides --open
+
 # Generate from a specific session file
 session-slides --from ~/.claude/projects/.../session.jsonl
 
-# Customize the output
+# Custom title and output path
 session-slides --title "Building the Auth System" --output slides.html
-
-# Open in browser after generation
-session-slides --open
 ```
+
+Output defaults to `./session-slides/{timestamp}.html` in your current directory. Each run is preserved.
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
 | `--from PATH` | Path to session JSONL file (auto-detects if omitted) |
-| `--output PATH` | Output HTML file path |
+| `--output PATH` | Output HTML file path (default: `./session-slides/{timestamp}.html`) |
 | `--title TEXT` | Custom presentation title |
 | `--open` | Open in browser after generation |
 | `--ai-titles` | Use Ollama for slide titles (requires local Ollama) |
-| `--clean` | Remove previous output files before generating |
+| `--clean` | Remove previous timestamped output files |
 | `--verbose` | Enable verbose output |
 
 ## Output
