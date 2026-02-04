@@ -434,16 +434,23 @@ def format_tool_use(
     # Bash/shell commands
     if tool_lower in ('bash', 'shell', 'terminal', 'exec', 'execute', 'run'):
         command = parameters.get('command') or parameters.get('cmd', '')
-        # Truncate long commands
-        if len(command) > 50:
-            command = command[:47] + "..."
-        return f"Running: {command}" if command else "Running command"
+        # Extract just the main command
+        if command:
+            # Remove common prefixes and pipes
+            main_cmd = command.split('|')[0].split('&&')[0].split(';')[0].strip()
+            # Get first word (the actual command)
+            cmd_word = main_cmd.split()[0] if main_cmd else ''
+            # Get a brief argument summary
+            if len(main_cmd) > 35:
+                main_cmd = main_cmd[:32] + "..."
+            return f"Running: {main_cmd}"
+        return "Running command"
 
     # Search/grep tools
     if tool_lower in ('grep', 'search', 'find', 'ripgrep', 'rg'):
         pattern = parameters.get('pattern') or parameters.get('query', '')
-        if len(pattern) > 30:
-            pattern = pattern[:27] + "..."
+        if len(pattern) > 25:
+            pattern = pattern[:22] + "..."
         return f"Searching: {pattern}" if pattern else "Searching"
 
     # Glob/file finding
@@ -471,9 +478,13 @@ def format_tool_use(
     # Task/agent tools
     if tool_lower in ('task', 'agent', 'spawn'):
         description = parameters.get('description') or parameters.get('prompt', '')
-        if len(description) > 40:
-            description = description[:37] + "..."
+        if len(description) > 35:
+            description = description[:32] + "..."
         return f"Task: {description}" if description else "Running task"
+
+    # TodoWrite tool
+    if tool_lower in ('todowrite', 'todo_write', 'todoupdate'):
+        return "Todowrite"
 
     # MCP tools - extract meaningful part
     if tool_lower.startswith('mcp__'):

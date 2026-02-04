@@ -439,6 +439,19 @@ COMMON_PREFIXES = [
     r"^basically\s+",
 ]
 
+# Patterns that indicate the start of a prompt is technical noise (errors, logs, etc.)
+TECHNICAL_NOISE_PATTERNS = [
+    r"^(?:Unchecked|Error|Warning|Failed|Exception|TypeError|SyntaxError|ReferenceError)",
+    r"^(?:runtime\.|console\.|window\.)",
+    r"^(?:\[[\w\s]+\])",  # [ERROR], [WARN], [INFO], etc.
+    r"^(?:\d{4}-\d{2}-\d{2})",  # Date-formatted logs
+    r"^(?:at\s+\w+\s*\()",  # Stack trace lines
+    r"^(?:GET|POST|PUT|DELETE|PATCH)\s+/",  # HTTP methods
+    r"^(?:\d{3}\s+)",  # HTTP status codes
+    r"^(?:npm|yarn|pnpm)\s+(?:ERR|WARN)",  # Package manager errors
+    r"^(?:\.{3})",  # Continuation dots
+]
+
 # File path pattern
 FILE_PATH_PATTERN = re.compile(
     r"""
@@ -510,9 +523,69 @@ STOP_WORDS = {
 }
 
 
+def _is_technical_noise(text: str) -> bool:
+    """
+    Check if text starts with technical noise (error messages, logs, etc.).
+
+    Args:
+        text: The text to check
+
+    Returns:
+        True if the text appears to be technical noise
+    """
+    for pattern in TECHNICAL_NOISE_PATTERNS:
+        if re.match(pattern, text, re.IGNORECASE):
+            return True
+    return False
+
+
+def _find_meaningful_sentence(text: str) -> str | None:
+    """
+    Find the first meaningful sentence in a prompt that starts with technical noise.
+
+    Looks for sentences containing action verbs or clear user requests.
+
+    Args:
+        text: The full prompt text
+
+    Returns:
+        A meaningful sentence or None
+    """
+    # Split by common sentence boundaries
+    sentences = re.split(r'(?<=[.!?])\s+|\n+', text)
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence or len(sentence) < 5:
+            continue
+
+        # Skip sentences that look like technical noise
+        if _is_technical_noise(sentence):
+            continue
+
+        # Skip sentences that are just paths or URLs
+        if sentence.startswith('/') or sentence.startswith('http'):
+            continue
+
+        # Look for sentences with action verbs or request phrases
+        sentence_lower = sentence.lower()
+        for verb in ACTION_VERBS:
+            if verb in sentence_lower:
+                return sentence
+
+        # Look for request indicators
+        if any(phrase in sentence_lower for phrase in ['please', 'can you', 'need to', 'want to', 'help me', 'should', 'fix', 'update', 'create', 'review']):
+            return sentence
+
+    return None
+
+
 def _clean_prompt(prompt: str) -> str:
     """
     Remove common prefixes and clean up the prompt for title extraction.
+
+    If the prompt starts with technical noise (errors, logs), tries to find
+    a meaningful sentence later in the prompt.
 
     Args:
         prompt: The raw user prompt
@@ -521,6 +594,26 @@ def _clean_prompt(prompt: str) -> str:
         Cleaned prompt with prefixes removed
     """
     cleaned = prompt.strip()
+
+    # If starts with technical noise, try to find a meaningful part
+    if _is_technical_noise(cleaned):
+        meaningful = _find_meaningful_sentence(cleaned)
+        if meaningful:
+            cleaned = meaningful
+        else:
+            # No meaningful part found - extract any actionable text
+            # Look for common request patterns anywhere in the text
+            patterns = [
+                r'(?:please|can you|need to|want to|help me)\s+(.+?)(?:\.|$)',
+                r'(?:fix|update|create|add|implement|review|check)\s+(.+?)(?:\.|$)',
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, cleaned, re.IGNORECASE)
+                if match:
+                    # Return the whole matched segment including the verb
+                    start = match.start()
+                    cleaned = cleaned[start:match.end()].strip()
+                    break
 
     # Apply prefix removal patterns iteratively
     for pattern in COMMON_PREFIXES:

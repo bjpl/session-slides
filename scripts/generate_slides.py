@@ -71,50 +71,80 @@ def generate_titles_for_session(session: Session, use_ai: bool = False) -> dict[
 
 
 def session_to_dict(session: Session) -> dict:
-    """Convert Session object to dict format expected by html_generator."""
+    """
+    Convert Session object to dict format expected by html_generator.
+
+    Uses get_conversation_pairs() to combine user prompts with assistant responses
+    into the format expected by generate_turn_slide():
+        {number, prompt, response, tools_used, files_modified, title, timestamp}
+
+    Applies truncation to keep slide content concise.
+    """
     turns_data = []
-    turn_num = 0
+    config = TruncationConfig()
 
-    for turn in session.turns:
-        if turn.is_user_message():
-            turn_num += 1
-            user_content = turn.get_text_content()
-            title = generate_turn_title(user_content, turn_num)
+    # Use get_conversation_pairs() to pair user turns with assistant responses
+    conversation_pairs = session.get_conversation_pairs()
 
-            turns_data.append({
-                'number': turn_num,
-                'role': 'user',
-                'content': user_content,
-                'title': title,
-                'timestamp': turn.timestamp.isoformat() if turn.timestamp else None,
-            })
-        else:
-            # Assistant turn
-            assistant_content = turn.get_text_content()
-            tool_uses = turn.get_tool_uses()
+    for turn_num, (user_turn, assistant_responses) in enumerate(conversation_pairs, 1):
+        # Get and truncate user prompt
+        raw_prompt = user_turn.get_text_content()
+        prompt = truncate_user_prompt(raw_prompt, config)
 
-            tools_formatted = []
-            for tool in tool_uses:
-                tools_formatted.append({
-                    'name': tool.name,
-                    'input': tool.input,
-                    'description': tool.get_description() if hasattr(tool, 'get_description') else format_tool_use(tool.name, tool.input),
-                })
+        # Combine all assistant responses
+        response_parts = []
+        tools_used = []
+        files_modified = []
 
-            turns_data.append({
-                'number': turn_num,
-                'role': 'assistant',
-                'content': assistant_content,
-                'tools': tools_formatted,
-                'timestamp': turn.timestamp.isoformat() if turn.timestamp else None,
-            })
+        for assistant_turn in assistant_responses:
+            # Get text content
+            raw_response = assistant_turn.get_text_content()
+            if raw_response:
+                # Truncate prose content
+                truncated_response = truncate_prose(raw_response, config)
+                response_parts.append(truncated_response)
+
+            # Collect tool uses
+            for tool_use in assistant_turn.get_tool_uses():
+                # Format tool use as a concise description
+                tool_desc = format_tool_use(tool_use.name, tool_use.input)
+                tools_used.append(tool_desc)
+
+                # Track file modifications from tool uses
+                if tool_use.name in ('Write', 'Edit', 'NotebookEdit'):
+                    file_path = tool_use.input.get('file_path', '')
+                    if file_path:
+                        action = 'created' if tool_use.name == 'Write' else 'modified'
+                        files_modified.append({
+                            'path': file_path,
+                            'action': action,
+                        })
+
+        # Combine response parts
+        response = '\n\n'.join(response_parts) if response_parts else ''
+
+        # Generate title for this turn
+        title = generate_turn_title(raw_prompt, turn_num)
+
+        turns_data.append({
+            'number': turn_num,
+            'prompt': prompt,
+            'response': response,
+            'tools_used': tools_used,
+            'files_modified': files_modified,
+            'title': title,
+            'timestamp': user_turn.timestamp.isoformat() if user_turn.timestamp else None,
+        })
 
     return {
         'session_id': session.session_id,
         'project_path': session.project_path,
         'turns': turns_data,
+        'metadata': {
+            'timestamp': session.start_time.isoformat() if session.start_time else None,
+        },
         'created_at': session.turns[0].timestamp.isoformat() if session.turns and session.turns[0].timestamp else None,
-        'total_turns': turn_num,
+        'total_turns': len(turns_data),
     }
 
 

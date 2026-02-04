@@ -30,6 +30,13 @@ CSS_VARS = {
     'error': '#f44336',
 }
 
+# Default truncation limits for long content
+CODE_BLOCK_MAX_LINES = 25
+CODE_BLOCK_HEAD_LINES = 8
+CODE_BLOCK_TAIL_LINES = 5
+PROSE_MAX_CHARS = 2000
+TERMINAL_MAX_LINES = 15
+
 
 HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
@@ -284,6 +291,13 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             font-size: 0.8rem;
         }}
 
+        .code-lines {{
+            color: var(--accent-light);
+            font-size: 0.75rem;
+            margin-left: auto;
+            opacity: 0.8;
+        }}
+
         code {{
             font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
         }}
@@ -488,6 +502,123 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             text-decoration: underline;
         }}
 
+        /* Collapsible code blocks */
+        .collapsible {{
+            position: relative;
+        }}
+
+        .collapsible-toggle {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 8px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: background 0.2s ease;
+        }}
+
+        .collapsible-toggle:hover {{
+            background: rgba(255, 255, 255, 0.12);
+        }}
+
+        .collapsible-toggle .toggle-label {{
+            font-size: 0.85rem;
+            color: var(--accent-light);
+        }}
+
+        .collapsible-toggle .toggle-icon {{
+            font-size: 0.8rem;
+            transition: transform 0.2s ease;
+        }}
+
+        .collapsible-content {{
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }}
+
+        .collapsible.expanded .collapsible-content {{
+            max-height: 2000px;
+        }}
+
+        .collapsible.expanded .toggle-icon {{
+            transform: rotate(180deg);
+        }}
+
+        /* Truncation indicator */
+        .truncation-indicator {{
+            background: linear-gradient(transparent, var(--code-bg));
+            padding: 15px 20px 10px;
+            margin-top: -10px;
+            text-align: center;
+            color: var(--accent-light);
+            font-size: 0.85rem;
+            cursor: pointer;
+            border-radius: 0 0 8px 8px;
+        }}
+
+        .truncation-indicator:hover {{
+            color: var(--text-light);
+        }}
+
+        /* Error highlighting in terminal output */
+        .terminal-output {{
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            overflow-x: auto;
+        }}
+
+        .terminal-line {{
+            margin: 2px 0;
+        }}
+
+        .terminal-line.error {{
+            color: var(--error);
+            font-weight: 500;
+        }}
+
+        .terminal-line.warning {{
+            color: var(--warning);
+        }}
+
+        .terminal-line.success {{
+            color: var(--success);
+        }}
+
+        /* Metadata section on title slide */
+        .metadata-section {{
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            text-align: left;
+            max-width: 500px;
+        }}
+
+        .metadata-item {{
+            display: flex;
+            gap: 10px;
+            margin: 8px 0;
+            font-size: 0.9rem;
+        }}
+
+        .metadata-label {{
+            color: var(--accent-light);
+            min-width: 100px;
+        }}
+
+        .metadata-value {{
+            color: var(--text-light);
+            opacity: 0.9;
+            word-break: break-all;
+        }}
+
         /* Responsive */
         @media (max-width: 768px) {{
             .slide-container {{
@@ -596,6 +727,32 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             }}, 3000);
         }}, 1000);
 
+        // Collapsible sections
+        function toggleCollapsible(element) {{
+            const collapsible = element.closest('.collapsible');
+            if (collapsible) {{
+                collapsible.classList.toggle('expanded');
+            }}
+        }}
+
+        // Initialize all collapsible toggle buttons
+        document.querySelectorAll('.collapsible-toggle').forEach(toggle => {{
+            toggle.addEventListener('click', function() {{
+                toggleCollapsible(this);
+            }});
+        }});
+
+        // Truncation indicator click to expand
+        document.querySelectorAll('.truncation-indicator').forEach(indicator => {{
+            indicator.addEventListener('click', function() {{
+                const codeBlock = this.previousElementSibling;
+                if (codeBlock && codeBlock.classList.contains('truncated-code')) {{
+                    codeBlock.classList.remove('truncated-code');
+                    this.style.display = 'none';
+                }}
+            }});
+        }});
+
         // Initialize
         showSlide(0);
     </script>
@@ -619,30 +776,152 @@ def html_escape(text: str) -> str:
     return html.escape(str(text))
 
 
-def format_code_block(code: str, language: str = '', filename: str = '') -> str:
+def format_code_block(
+    code: str,
+    language: str = '',
+    filename: str = '',
+    max_lines: int = CODE_BLOCK_MAX_LINES,
+    collapsible: bool = True
+) -> str:
     """
     Format a code block with syntax highlighting container.
+
+    Handles truncation for very long code blocks with visual indicators.
 
     Args:
         code: The code content
         language: Programming language for the code block
         filename: Optional filename to display
+        max_lines: Maximum lines before truncation (0 = no limit)
+        collapsible: Whether to make long code blocks collapsible
 
     Returns:
         HTML string for the formatted code block
     """
-    escaped_code = html_escape(code)
+    lines = code.split('\n')
+    total_lines = len(lines)
+    is_truncated = max_lines > 0 and total_lines > max_lines
 
+    # Build header
     header = ''
-    if language or filename:
+    if language or filename or is_truncated:
         lang_html = f'<span class="code-language">{html_escape(language)}</span>' if language else ''
         file_html = f'<span class="code-filename">{html_escape(filename)}</span>' if filename else ''
-        header = f'<div class="code-block-header">{lang_html}{file_html}</div>'
+        lines_info = f'<span class="code-lines">({total_lines} lines)</span>' if is_truncated else ''
+        header = f'<div class="code-block-header">{lang_html}{file_html}{lines_info}</div>'
 
+    if is_truncated and collapsible:
+        # Show head + tail with truncation indicator
+        head_lines = lines[:CODE_BLOCK_HEAD_LINES]
+        tail_lines = lines[-CODE_BLOCK_TAIL_LINES:]
+        omitted = total_lines - CODE_BLOCK_HEAD_LINES - CODE_BLOCK_TAIL_LINES
+
+        head_code = html_escape('\n'.join(head_lines))
+        tail_code = html_escape('\n'.join(tail_lines))
+
+        truncation_msg = f'[... {omitted} more lines ...]'
+
+        return f'''<div class="code-block collapsible">
+            {header}
+            <pre><code>{head_code}</code></pre>
+            <div class="collapsible-toggle" onclick="toggleCollapsible(this)">
+                <span class="toggle-label">{truncation_msg}</span>
+                <span class="toggle-icon">&#9660;</span>
+            </div>
+            <div class="collapsible-content">
+                <pre><code>{html_escape(chr(10).join(lines[CODE_BLOCK_HEAD_LINES:-CODE_BLOCK_TAIL_LINES]))}</code></pre>
+            </div>
+            <pre><code>{tail_code}</code></pre>
+        </div>'''
+
+    escaped_code = html_escape(code)
     return f'<div class="code-block">{header}<pre><code>{escaped_code}</code></pre></div>'
 
 
-def format_response_content(content: str) -> str:
+def is_error_line(line: str) -> bool:
+    """Check if a line appears to be an error message."""
+    error_indicators = [
+        'error', 'Error', 'ERROR',
+        'exception', 'Exception', 'EXCEPTION',
+        'failed', 'Failed', 'FAILED',
+        'fatal', 'Fatal', 'FATAL',
+        'traceback', 'Traceback',
+        'denied', 'Denied', 'DENIED',
+    ]
+    return any(indicator in line for indicator in error_indicators)
+
+
+def is_warning_line(line: str) -> bool:
+    """Check if a line appears to be a warning message."""
+    warning_indicators = ['warning', 'Warning', 'WARNING', 'WARN', 'warn']
+    return any(indicator in line for indicator in warning_indicators)
+
+
+def is_success_line(line: str) -> bool:
+    """Check if a line appears to be a success message."""
+    success_indicators = ['success', 'Success', 'SUCCESS', 'passed', 'Passed', 'PASSED', 'ok', 'OK', 'done', 'Done', 'DONE']
+    return any(indicator in line for indicator in success_indicators)
+
+
+def format_terminal_output(output: str, max_lines: int = TERMINAL_MAX_LINES) -> str:
+    """
+    Format terminal output with error highlighting.
+
+    Args:
+        output: Raw terminal output
+        max_lines: Maximum lines to show before truncation
+
+    Returns:
+        HTML-formatted terminal output with line classifications
+    """
+    if not output:
+        return ''
+
+    lines = output.strip().split('\n')
+    total_lines = len(lines)
+    is_truncated = max_lines > 0 and total_lines > max_lines
+
+    # Find error lines (always show these)
+    error_indices = [i for i, line in enumerate(lines) if is_error_line(line)]
+
+    formatted_lines = []
+
+    if is_truncated:
+        # Show first few lines
+        for i, line in enumerate(lines[:max_lines]):
+            css_class = 'terminal-line'
+            if is_error_line(line):
+                css_class += ' error'
+            elif is_warning_line(line):
+                css_class += ' warning'
+            elif is_success_line(line):
+                css_class += ' success'
+            formatted_lines.append(f'<div class="{css_class}">{html_escape(line)}</div>')
+
+        # Add truncation indicator
+        omitted = total_lines - max_lines
+        formatted_lines.append(f'<div class="terminal-line" style="color: #888;">... ({omitted} more lines)</div>')
+
+        # Always include error lines from the truncated portion
+        for i in error_indices:
+            if i >= max_lines:
+                line = lines[i]
+                formatted_lines.append(f'<div class="terminal-line error">{html_escape(line)}</div>')
+    else:
+        for line in lines:
+            css_class = 'terminal-line'
+            if is_error_line(line):
+                css_class += ' error'
+            elif is_warning_line(line):
+                css_class += ' warning'
+            elif is_success_line(line):
+                css_class += ' success'
+            formatted_lines.append(f'<div class="{css_class}">{html_escape(line)}</div>')
+
+    return f'<div class="terminal-output">{chr(10).join(formatted_lines)}</div>'
+
+
+def format_response_content(content: str, truncate_prose: bool = True) -> str:
     """
     Format response content, handling code blocks and inline formatting.
 
@@ -654,12 +933,26 @@ def format_response_content(content: str) -> str:
 
     Args:
         content: Raw response content with potential markdown formatting
+        truncate_prose: Whether to truncate long prose sections
 
     Returns:
         HTML-formatted content string safe for embedding in HTML
     """
     if not content:
         return ''
+
+    # Truncate very long content
+    if truncate_prose and len(content) > PROSE_MAX_CHARS:
+        # Find a good break point
+        break_point = content.rfind('\n\n', 0, PROSE_MAX_CHARS)
+        if break_point == -1:
+            break_point = content.rfind('. ', 0, PROSE_MAX_CHARS)
+        if break_point == -1:
+            break_point = PROSE_MAX_CHARS
+
+        truncated_content = content[:break_point]
+        remaining_chars = len(content) - break_point
+        content = truncated_content + f'\n\n[... {remaining_chars} more characters truncated ...]'
 
     # Use placeholders for code blocks to protect them during escaping
     code_blocks = []
@@ -721,6 +1014,9 @@ def generate_title_slide(session: Dict[str, Any], title: str) -> str:
     """
     Generate the title slide HTML.
 
+    Supports both new format (session_id, project_path, created_at at root)
+    and old format (metadata dict with timestamp).
+
     Args:
         session: Parsed session data containing metadata and turns
         title: Title for the slide deck
@@ -728,20 +1024,87 @@ def generate_title_slide(session: Dict[str, Any], title: str) -> str:
     Returns:
         HTML string for the title slide
     """
-    metadata = session.get('metadata', {})
     turns = session.get('turns', [])
 
-    # Calculate statistics
-    turn_count = len(turns)
+    # Handle both new and old data formats for metadata
+    # New format: session_id, project_path, created_at at root level
+    # Old format: metadata dict with timestamp
+    session_id = session.get('session_id', '')
+    project_path = session.get('project_path', '')
+    created_at = session.get('created_at', '')
+
+    # Fall back to old format if new fields are empty
+    metadata = session.get('metadata', {})
+    if not created_at:
+        created_at = metadata.get('timestamp', '')
+
+    # Calculate statistics - count user turns only (turns with role='user' or has prompt)
+    user_turn_count = 0
     tool_set = set()
+
     for turn in turns:
-        for tool in turn.get('tools_used', []):
-            tool_set.add(tool)
+        # New format uses 'role' field
+        role = turn.get('role', '')
+        if role == 'user' or (not role and turn.get('prompt')):
+            user_turn_count += 1
+
+        # Collect tools - handle both formats
+        # Old format: tools_used list of strings
+        # New format: tools list of dicts with 'name' key
+        tools_used = turn.get('tools_used', [])
+        tools_list = turn.get('tools', [])
+
+        for tool in tools_used:
+            if isinstance(tool, str):
+                tool_set.add(tool)
+            elif isinstance(tool, dict):
+                tool_set.add(tool.get('name', ''))
+
+        for tool in tools_list:
+            if isinstance(tool, str):
+                tool_set.add(tool)
+            elif isinstance(tool, dict):
+                tool_set.add(tool.get('name', ''))
+
     tool_count = len(tool_set)
 
-    # Get timestamp if available
-    timestamp = metadata.get('timestamp', '')
-    subtitle = f'Session recorded: {timestamp}' if timestamp else 'Claude Code Session'
+    # Use total_turns if provided (new format), otherwise count
+    total_turns = session.get('total_turns', user_turn_count)
+
+    # Build subtitle
+    if created_at:
+        subtitle = f'Session recorded: {created_at}'
+    else:
+        subtitle = 'Claude Code Session'
+
+    # Build metadata section if we have details
+    metadata_html = ''
+    if session_id or project_path:
+        metadata_items = []
+        if session_id:
+            # Show abbreviated session ID
+            display_id = session_id[:12] + '...' if len(session_id) > 12 else session_id
+            metadata_items.append(f'''
+                <div class="metadata-item">
+                    <span class="metadata-label">Session:</span>
+                    <span class="metadata-value">{html_escape(display_id)}</span>
+                </div>
+            ''')
+        if project_path:
+            # Show just the project folder name for brevity
+            path_parts = project_path.replace('\\', '/').rstrip('/').split('/')
+            display_path = path_parts[-1] if path_parts else project_path
+            metadata_items.append(f'''
+                <div class="metadata-item">
+                    <span class="metadata-label">Project:</span>
+                    <span class="metadata-value">{html_escape(display_path)}</span>
+                </div>
+            ''')
+        metadata_html = f'''
+            <div class="metadata-section">
+                {''.join(metadata_items)}
+            </div>
+        '''
 
     return f'''
     <div class="slide slide-title active">
@@ -749,7 +1112,7 @@ def generate_title_slide(session: Dict[str, Any], title: str) -> str:
         <p class="subtitle">{html_escape(subtitle)}</p>
         <div class="stats">
             <div class="stat">
-                <div class="stat-value">{turn_count}</div>
+                <div class="stat-value">{total_turns}</div>
                 <div class="stat-label">Turns</div>
             </div>
             <div class="stat">
@@ -757,6 +1120,7 @@ def generate_title_slide(session: Dict[str, Any], title: str) -> str:
                 <div class="stat-label">Tools Used</div>
             </div>
         </div>
+        {metadata_html}
     </div>
     '''
 
@@ -765,30 +1129,85 @@ def generate_turn_slide(turn: Dict[str, Any], turn_index: int, total_turns: int)
     """
     Generate a content slide for a single turn.
 
+    Supports both data formats:
+    - Old format: prompt, response, tools_used (list of strings), files_modified
+    - New format: content (for both user/assistant), tools (list of dicts with 'name'), role
+
     Args:
-        turn: Turn data containing prompt, response, tools_used, etc.
+        turn: Turn data containing prompt/content, response, tools_used/tools, etc.
         turn_index: 1-based index of this turn
         total_turns: Total number of turns in the session
 
     Returns:
         HTML string for the turn slide
     """
+    # Handle both data formats for prompt/content
+    # Old format: 'prompt' and 'response' fields
+    # New format: 'content' field with 'role' indicating user/assistant
     prompt = turn.get('prompt', '')
     response = turn.get('response', '')
+
+    # New format uses 'content' field
+    role = turn.get('role', '')
+    content = turn.get('content', '')
+
+    # If using new format, map content to prompt/response based on role
+    if role == 'user' and content and not prompt:
+        prompt = content
+    elif role == 'assistant' and content and not response:
+        response = content
+
+    # Get title if provided (new format)
+    slide_title = turn.get('title', '')
+
+    # Handle both tool formats
+    # Old format: tools_used - list of strings
+    # New format: tools - list of dicts with 'name' and optionally 'description'
     tools_used = turn.get('tools_used', [])
+    tools_list = turn.get('tools', [])
+
+    # Normalize tools to list of names
+    tool_names = []
+    tool_descriptions = {}
+
+    for tool in tools_used:
+        if isinstance(tool, str):
+            tool_names.append(tool)
+        elif isinstance(tool, dict):
+            name = tool.get('name', '')
+            if name:
+                tool_names.append(name)
+                if tool.get('description'):
+                    tool_descriptions[name] = tool.get('description')
+
+    for tool in tools_list:
+        if isinstance(tool, str):
+            if tool not in tool_names:
+                tool_names.append(tool)
+        elif isinstance(tool, dict):
+            name = tool.get('name', '')
+            if name and name not in tool_names:
+                tool_names.append(name)
+                if tool.get('description'):
+                    tool_descriptions[name] = tool.get('description')
+
     files_modified = turn.get('files_modified', [])
 
     # Build tools section
     tools_html = ''
-    if tools_used:
-        badges = ''.join(
-            f'<span class="tool-badge">{html_escape(tool)}</span>'
-            for tool in tools_used
-        )
+    if tool_names:
+        badges = []
+        for tool in tool_names:
+            desc = tool_descriptions.get(tool, '')
+            if desc:
+                badges.append(f'<span class="tool-badge" title="{html_escape(desc)}">{html_escape(tool)}</span>')
+            else:
+                badges.append(f'<span class="tool-badge">{html_escape(tool)}</span>')
+
         tools_html = f'''
         <div class="tools-section">
             <div class="tools-label">Tools Used</div>
-            <div class="tool-badges">{badges}</div>
+            <div class="tool-badges">{''.join(badges)}</div>
         </div>
         '''
 
@@ -820,29 +1239,49 @@ def generate_turn_slide(turn: Dict[str, Any], turn_index: int, total_turns: int)
         '''
 
     # Format response content
-    formatted_response = format_response_content(response)
+    formatted_response = format_response_content(response) if response else ''
 
-    return f'''
-    <div class="slide">
-        <div class="slide-content">
-            <div class="slide-header">
-                <span class="turn-label">Turn {turn_index}</span>
-                <span class="slide-number">{turn_index} of {total_turns}</span>
-            </div>
+    # Build header - use title if provided, otherwise just turn number
+    if slide_title:
+        header_label = f'Turn {turn_index}: {html_escape(slide_title)}'
+    else:
+        header_label = f'Turn {turn_index}'
 
+    # Build prompt section (only if we have a prompt)
+    prompt_html = ''
+    if prompt:
+        prompt_html = f'''
             <div class="user-prompt">
                 <div class="user-prompt-label">User Prompt</div>
                 <div class="user-prompt-text">{html_escape(prompt)}</div>
             </div>
+        '''
 
-            {tools_html}
-
+    # Build response section (only if we have a response)
+    response_html = ''
+    if formatted_response:
+        response_html = f'''
             <div class="response-section">
                 <div class="response-label">Response</div>
                 <div class="response-content">
                     {formatted_response}
                 </div>
             </div>
+        '''
+
+    return f'''
+    <div class="slide">
+        <div class="slide-content">
+            <div class="slide-header">
+                <span class="turn-label">{header_label}</span>
+                <span class="slide-number">{turn_index} of {total_turns}</span>
+            </div>
+
+            {prompt_html}
+
+            {tools_html}
+
+            {response_html}
 
             {files_html}
         </div>
@@ -854,6 +1293,10 @@ def generate_summary_slide(session: Dict[str, Any]) -> str:
     """
     Generate the summary slide with session overview.
 
+    Handles both data formats for tools:
+    - Old format: tools_used - list of strings
+    - New format: tools - list of dicts with 'name' key
+
     Args:
         session: Parsed session data
 
@@ -862,13 +1305,26 @@ def generate_summary_slide(session: Dict[str, Any]) -> str:
     """
     turns = session.get('turns', [])
 
-    # Collect all tools used
-    all_tools = []
+    # Collect all tools used - handle both formats
+    tool_counts: Dict[str, int] = {}
     for turn in turns:
-        all_tools.extend(turn.get('tools_used', []))
-    tool_counts = {}
-    for tool in all_tools:
-        tool_counts[tool] = tool_counts.get(tool, 0) + 1
+        # Old format: tools_used list
+        for tool in turn.get('tools_used', []):
+            if isinstance(tool, str):
+                tool_counts[tool] = tool_counts.get(tool, 0) + 1
+            elif isinstance(tool, dict):
+                name = tool.get('name', '')
+                if name:
+                    tool_counts[name] = tool_counts.get(name, 0) + 1
+
+        # New format: tools list
+        for tool in turn.get('tools', []):
+            if isinstance(tool, str):
+                tool_counts[tool] = tool_counts.get(tool, 0) + 1
+            elif isinstance(tool, dict):
+                name = tool.get('name', '')
+                if name:
+                    tool_counts[name] = tool_counts.get(name, 0) + 1
 
     # Sort by count
     sorted_tools = sorted(tool_counts.items(), key=lambda x: x[1], reverse=True)
@@ -929,14 +1385,88 @@ def generate_summary_slide(session: Dict[str, Any]) -> str:
     '''
 
 
+def _group_conversation_turns(turns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Group user/assistant turns into conversation pairs.
+
+    In the new format, turns have 'role' field (user/assistant).
+    This groups them so each slide shows a user prompt with its assistant response.
+
+    In the old format, turns already have 'prompt' and 'response' together.
+
+    Args:
+        turns: List of turn dictionaries
+
+    Returns:
+        List of grouped turns suitable for slide generation
+    """
+    if not turns:
+        return []
+
+    # Check if we're dealing with new format (has 'role' field)
+    has_roles = any(turn.get('role') for turn in turns)
+
+    if not has_roles:
+        # Old format - already paired, return as-is
+        return turns
+
+    # New format - group user turns with following assistant turns
+    grouped = []
+    current_group = None
+
+    for turn in turns:
+        role = turn.get('role', '')
+
+        if role == 'user':
+            # Save any previous group
+            if current_group is not None:
+                grouped.append(current_group)
+
+            # Start a new group with this user turn
+            current_group = {
+                'prompt': turn.get('content', ''),
+                'title': turn.get('title', ''),
+                'response': '',
+                'tools': [],
+                'tools_used': [],
+                'files_modified': [],
+                'timestamp': turn.get('timestamp'),
+            }
+
+        elif role == 'assistant' and current_group is not None:
+            # Add assistant response to current group
+            current_group['response'] = turn.get('content', '')
+
+            # Merge tools
+            for tool in turn.get('tools', []):
+                current_group['tools'].append(tool)
+            for tool in turn.get('tools_used', []):
+                current_group['tools_used'].append(tool)
+
+            # Merge files
+            for f in turn.get('files_modified', []):
+                current_group['files_modified'].append(f)
+
+    # Don't forget the last group
+    if current_group is not None:
+        grouped.append(current_group)
+
+    return grouped
+
+
 def generate_html(session: Dict[str, Any], title: str = 'Session Slides') -> str:
     """
     Generate a complete HTML slide deck from parsed session data.
 
+    Supports both data formats:
+    - Old format: turns have 'prompt' and 'response' together
+    - New format: turns have 'role' (user/assistant) with separate 'content'
+
     Args:
         session: Parsed session data containing:
-            - metadata: dict with session info (timestamp, etc.)
-            - turns: list of turn dicts with prompt, response, tools_used, files_modified
+            - metadata: dict with session info (timestamp, etc.) OR
+            - session_id, project_path, created_at at root level (new format)
+            - turns: list of turn dicts with prompt/content, response, tools_used/tools, etc.
         title: Title for the slide deck
 
     Returns:
@@ -944,18 +1474,23 @@ def generate_html(session: Dict[str, Any], title: str = 'Session Slides') -> str
     """
     turns = session.get('turns', [])
 
+    # Group turns if needed (for new format with separate user/assistant turns)
+    grouped_turns = _group_conversation_turns(turns)
+
     # Generate all slides
     slides = []
 
     # Title slide
     slides.append(generate_title_slide(session, title))
 
-    # Turn slides
-    for i, turn in enumerate(turns, 1):
-        slides.append(generate_turn_slide(turn, i, len(turns)))
+    # Turn slides - use grouped turns for slide count
+    total_turns = len(grouped_turns)
+    for i, turn in enumerate(grouped_turns, 1):
+        slides.append(generate_turn_slide(turn, i, total_turns))
 
     # Summary slide
-    if turns:
+    if grouped_turns:
+        # Pass the original session (which has all turns) for accurate summary
         slides.append(generate_summary_slide(session))
 
     # Combine all slides
@@ -972,8 +1507,8 @@ def generate_html(session: Dict[str, Any], title: str = 'Session Slides') -> str
 
 
 if __name__ == '__main__':
-    # Example usage / test
-    sample_session = {
+    # Example usage / test with old format
+    sample_session_old = {
         'metadata': {
             'timestamp': '2025-01-31T10:30:00Z'
         },
@@ -1002,5 +1537,53 @@ This uses recursion to calculate the factorial.''',
         ]
     }
 
-    html_output = generate_html(sample_session, 'Factorial Function Development')
-    print(f'Generated HTML with {len(html_output)} characters')
+    # Example with new format (from session_to_dict)
+    sample_session_new = {
+        'session_id': 'abc123def456',
+        'project_path': '/home/user/my_project',
+        'created_at': '2025-02-01T14:30:00Z',
+        'total_turns': 2,
+        'turns': [
+            {
+                'number': 1,
+                'role': 'user',
+                'content': 'Create a simple Python function to calculate factorial',
+                'title': 'Factorial Implementation',
+                'timestamp': '2025-02-01T14:30:00Z',
+            },
+            {
+                'number': 1,
+                'role': 'assistant',
+                'content': '''Here's a factorial function using recursion.''',
+                'tools': [
+                    {'name': 'Write', 'description': 'Write: math_utils.py'},
+                    {'name': 'Read', 'description': 'Read: existing_code.py'},
+                ],
+                'timestamp': '2025-02-01T14:30:15Z',
+            },
+            {
+                'number': 2,
+                'role': 'user',
+                'content': 'Add error handling',
+                'title': 'Error Handling',
+                'timestamp': '2025-02-01T14:31:00Z',
+            },
+            {
+                'number': 2,
+                'role': 'assistant',
+                'content': 'I\'ve added validation to check for negative numbers.',
+                'tools': [
+                    {'name': 'Edit', 'description': 'Edit: math_utils.py'},
+                ],
+                'timestamp': '2025-02-01T14:31:30Z',
+            }
+        ]
+    }
+
+    print("Testing old format...")
+    html_output_old = generate_html(sample_session_old, 'Factorial (Old Format)')
+    print(f'Generated HTML with {len(html_output_old)} characters')
+
+    print("\nTesting new format...")
+    html_output_new = generate_html(sample_session_new, 'Factorial (New Format)')
+    print(f'Generated HTML with {len(html_output_new)} characters')
