@@ -43,6 +43,7 @@ npm-debug.log*
 package-lock.json
 
 # Testing
+scripts/tests/
 .pytest_cache/
 .coverage
 htmlcov/

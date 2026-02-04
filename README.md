@@ -5,7 +5,7 @@ Convert Claude Code session transcripts into navigable HTML slide presentations.
 ## Installation
 
 ```bash
-npm install -g session-slides
+npm install -g @bjpl/session-slides
 ```
 
 Requires Python 3.8 or later.
@@ -35,6 +35,7 @@ session-slides --open
 | `--title TEXT` | Custom presentation title |
 | `--open` | Open in browser after generation |
 | `--ai-titles` | Use Ollama for slide titles (requires local Ollama) |
+| `--clean` | Remove previous output files before generating |
 | `--verbose` | Enable verbose output |
 
 ## Output

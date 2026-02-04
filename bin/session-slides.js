@@ -131,7 +131,7 @@ function main() {
   const scriptPath = path.join(__dirname, '..', 'scripts', SCRIPT_NAME);
 
   if (!fs.existsSync(scriptPath)) {
-    exitWithError(`Python script not found: ${scriptPath}\n\nThis may indicate a corrupt installation. Try reinstalling:\n  npm uninstall -g session-slides && npm install -g session-slides`);
+    exitWithError(`Python script not found: ${scriptPath}\n\nThis may indicate a corrupt installation. Try reinstalling:\n  npm uninstall -g @bjpl/session-slides && npm install -g @bjpl/session-slides`);
   }
 
   // Build arguments: python args + script path + user args
