@@ -1,0 +1,39 @@
+{
+  "name": "@bjpl/session-slides",
+  "version": "0.1.0",
+  "description": "Convert Claude Code session transcripts into navigable HTML slide presentations",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "slides",
+    "presentation",
+    "session",
+    "jsonl",
+    "html",
+    "cli"
+  ],
+  "homepage": "https://github.com/bjplambert/session-slides",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bjplambert/session-slides.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bjplambert/session-slides/issues"
+  },
+  "license": "MIT",
+  "author": "Brandon J.P. Lambert",
+  "bin": {
+    "session-slides": "./bin/session-slides.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "dependencies": {
+    "cross-spawn": "^7.0.3"
+  }
+}

@@ -1,0 +1,53 @@
+# Python cache (MUST be first and explicit)
+__pycache__
+__pycache__/
+*/__pycache__
+*/__pycache__/
+**/__pycache__
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Output files
+output/
+output
+
+# IDE and editor files
+.claude/
+.claude-flow/
+.claude-plugin/
+.swarm/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Configuration files
+.mcp.json
+CLAUDE.md
+
+# Claude Code command definitions
+commands/
+
+# Git
+.git/
+.gitignore
+
+# npm
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# OS files
+.DS_Store
+Thumbs.db
