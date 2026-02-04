@@ -5,7 +5,7 @@ Convert Claude Code session transcripts into navigable HTML slide presentations.
 ## Installation
 
 ```bash
-npm install -g @bjpl/session-slides
+npm install -g session-slides
 ```
 
 Requires Python 3.8 or later.
