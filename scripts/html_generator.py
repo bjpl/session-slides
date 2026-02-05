@@ -1056,6 +1056,8 @@ def _format_datetime(dt_string: str) -> tuple:
     """
     Parse and format a datetime string into readable date and time components.
 
+    Converts UTC timestamps to the local timezone before formatting.
+
     Args:
         dt_string: ISO format datetime string or similar
 
@@ -1065,31 +1067,32 @@ def _format_datetime(dt_string: str) -> tuple:
     if not dt_string:
         return None, None
 
-    # Handle timezone offset by stripping it (e.g., +00:00)
-    clean_dt = re.sub(r'[+-]\d{2}:\d{2}$', '', dt_string)
-
-    # Try various datetime formats
-    formats = [
-        '%Y-%m-%dT%H:%M:%S.%fZ',
-        '%Y-%m-%dT%H:%M:%SZ',
-        '%Y-%m-%dT%H:%M:%S.%f',
-        '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%d %H:%M:%S.%f',
-        '%Y-%m-%d %H:%M:%S',
-        '%Y-%m-%d',
-    ]
-
+    # Try Python's fromisoformat first (handles +00:00, Z, microseconds)
     dt = None
-    for fmt in formats:
-        try:
-            dt = datetime.strptime(clean_dt, fmt)
-            break
-        except ValueError:
-            continue
+    try:
+        dt = datetime.fromisoformat(dt_string.replace('Z', '+00:00'))
+    except (ValueError, AttributeError):
+        # Fall back to manual parsing for non-standard formats
+        clean_dt = re.sub(r'[+-]\d{2}:\d{2}$', '', dt_string)
+        for fmt in [
+            '%Y-%m-%dT%H:%M:%S.%f',
+            '%Y-%m-%dT%H:%M:%S',
+            '%Y-%m-%d %H:%M:%S.%f',
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d',
+        ]:
+            try:
+                dt = datetime.strptime(clean_dt, fmt)
+                break
+            except ValueError:
+                continue
 
     if dt is None:
-        # Return the raw string if we can't parse it
         return dt_string, None
+
+    # Convert to local timezone if the datetime is timezone-aware
+    if dt.tzinfo is not None:
+        dt = dt.astimezone()
 
     # Format nicely: "February 4, 2026" and "2:30 PM"
     date_str = dt.strftime('%B %d, %Y').replace(' 0', ' ')  # Remove leading zero from day
@@ -1120,28 +1123,18 @@ def _calculate_duration(turns: list) -> str:
     if len(timestamps) < 2:
         return None
 
-    # Strip timezone offsets before parsing (e.g., +00:00)
-    first_ts = re.sub(r'[+-]\d{2}:\d{2}$', '', timestamps[0])
-    last_ts = re.sub(r'[+-]\d{2}:\d{2}$', '', timestamps[-1])
-
-    # Try to parse first and last timestamps
-    formats = [
-        '%Y-%m-%dT%H:%M:%S.%fZ',
-        '%Y-%m-%dT%H:%M:%SZ',
-        '%Y-%m-%dT%H:%M:%S.%f',
-        '%Y-%m-%dT%H:%M:%S',
-    ]
-
+    # Parse first and last timestamps
     first_dt = None
     last_dt = None
-
-    for fmt in formats:
+    for ts_str, target in [(timestamps[0], 'first'), (timestamps[-1], 'last')]:
         try:
-            first_dt = datetime.strptime(first_ts, fmt)
-            last_dt = datetime.strptime(last_ts, fmt)
-            break
-        except ValueError:
-            continue
+            dt = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+        except (ValueError, AttributeError):
+            dt = None
+        if target == 'first':
+            first_dt = dt
+        else:
+            last_dt = dt
 
     if first_dt is None or last_dt is None:
         return None
