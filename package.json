@@ -1,6 +1,6 @@
 {
   "name": "session-slides",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Convert Claude Code session transcripts into navigable HTML slide presentations",
   "keywords": [
     "claude",
